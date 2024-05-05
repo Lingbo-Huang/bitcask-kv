@@ -2,7 +2,6 @@ package data
 
 import (
 	"encoding/binary"
-	"fmt"
 	"hash/crc32"
 )
 
@@ -69,7 +68,7 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	// 小端序存储字节数组
 	binary.LittleEndian.PutUint32(encBytes[:4], crc)
 
-	fmt.Printf("header length: %d, crc: %d\n", index, crc)
+	//fmt.Printf("header length: %d, crc: %d\n", index, crc) // 测试用
 	return encBytes, int64(size)
 }
 

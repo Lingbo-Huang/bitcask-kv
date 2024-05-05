@@ -1,5 +1,7 @@
 package bitcask_go
 
+import "os"
+
 // Options 用户配置项
 type Options struct {
 	// 数据库数据目录
@@ -21,3 +23,11 @@ const (
 	// ART Adaptive Radix Tree 自适应基数树索引
 	ART
 )
+
+// 定义一个默认的 Options
+var DefaultOptions = Options{
+	DirPath:      os.TempDir(),
+	DataFileSize: 256 * 1024 * 1024, // 256MB
+	SyncWrites:   false,
+	IndexType:    BTree,
+}

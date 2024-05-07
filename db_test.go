@@ -10,16 +10,8 @@ import (
 // 测试完成之后销毁DB数据目录
 func destoryDB(db *DB) {
 	if db != nil {
-		//if db.activeFile != nil {
-		//	_ = db.activeFile.Close() // todo db还没实现 Close 方法
-		//}
 		if db.activeFile != nil {
-			_ = db.activeFile.Close()
-		}
-		for _, of := range db.olderFiles {
-			if of != nil {
-				_ = of.Close()
-			}
+			_ = db.Close()
 		}
 		err := os.RemoveAll(db.options.DirPath)
 		if err != nil {
@@ -81,17 +73,7 @@ func TestDB_Put(t *testing.T) {
 	assert.Equal(t, 2, len(db.olderFiles))
 
 	// 6. 重启后再Put数据
-	// todo 等 Close 方法实现后替换
-	if db.activeFile != nil {
-		err = db.activeFile.Close()
-		assert.Nil(t, err)
-	}
-	for _, of := range db.olderFiles {
-		if of != nil {
-			err = of.Close()
-			assert.Nil(t, err)
-		}
-	}
+	_ = db.Close()
 	// 重启数据库
 	db2, err := Open(opts)
 	defer destoryDB(db2)
@@ -156,16 +138,7 @@ func TestDB_Get(t *testing.T) {
 	assert.NotNil(t, val5)
 
 	// 重启后，前面写入的数据都能拿到
-	if db.activeFile != nil {
-		err = db.activeFile.Close()
-		assert.Nil(t, err)
-	}
-	for _, of := range db.olderFiles {
-		if of != nil {
-			err = of.Close()
-			assert.Nil(t, err)
-		}
-	}
+	_ = db.Close()
 
 	// 重启数据库
 	db2, err := Open(opts)
@@ -224,16 +197,7 @@ func TestDB_Delete(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 重启之后进行校验
-	if db.activeFile != nil {
-		err = db.activeFile.Close()
-		assert.Nil(t, err)
-	}
-	for _, of := range db.olderFiles {
-		if of != nil {
-			err = of.Close()
-			assert.Nil(t, err)
-		}
-	}
+	_ = db.Close()
 
 	// 重启数据库
 	db2, err := Open(opts)
@@ -244,4 +208,102 @@ func TestDB_Delete(t *testing.T) {
 	val2, err := db2.Get(utils.GetTestKey(22))
 	assert.Nil(t, err)
 	assert.Equal(t, val1, val2)
+}
+
+func TestDB_ListKeys(t *testing.T) {
+	opts := DefaultOptions
+	dir, _ := os.MkdirTemp("", "bitcask-go-list-keys")
+	opts.DirPath = dir
+	db, err := Open(opts)
+	defer destoryDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	// 数据库为空
+	keys := db.ListKeys()
+	//t.Log(len(keys))
+	assert.Equal(t, 0, len(keys))
+
+	// 只有一条数据
+	err = db.Put(utils.GetTestKey(11), utils.RandomValue(20))
+	assert.Nil(t, err)
+	keys1 := db.ListKeys()
+	//t.Log(len(keys1))
+	assert.Equal(t, 1, len(keys1))
+
+	// 有多条数据
+	err = db.Put(utils.GetTestKey(22), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(utils.GetTestKey(33), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(utils.GetTestKey(44), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(utils.GetTestKey(55), utils.RandomValue(20))
+	assert.Nil(t, err)
+
+	keys3 := db.ListKeys()
+	assert.Equal(t, 5, len(keys3))
+	for _, k := range keys3 {
+		//t.Log(string(k))
+		assert.NotNil(t, k)
+	}
+}
+
+func TestDB_Fold(t *testing.T) {
+	opts := DefaultOptions
+	dir, _ := os.MkdirTemp("", "bitcask-go-list-keys")
+	opts.DirPath = dir
+	db, err := Open(opts)
+	defer destoryDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Put(utils.GetTestKey(11), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(utils.GetTestKey(22), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(utils.GetTestKey(33), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(utils.GetTestKey(44), utils.RandomValue(20))
+	assert.Nil(t, err)
+
+	err = db.Fold(func(key []byte, value []byte) bool {
+		assert.NotNil(t, key)
+		assert.NotNil(t, value)
+		//if bytes.Compare(key, utils.GetTestKey(22)) == 0 {
+		//	return false
+		//}
+		//t.Log(string(key))
+		//t.Log(string(value))
+		return true
+	})
+	assert.Nil(t, err)
+}
+
+func TestDB_Close(t *testing.T) {
+	opts := DefaultOptions
+	dir, _ := os.MkdirTemp("", "bitcask-go-close")
+	opts.DirPath = dir
+	db, err := Open(opts)
+	defer destoryDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Put(utils.GetTestKey(11), utils.RandomValue(20))
+	assert.Nil(t, err)
+}
+
+func TestDB_Sync(t *testing.T) {
+	opts := DefaultOptions
+	dir, _ := os.MkdirTemp("", "bitcask-go-sync")
+	opts.DirPath = dir
+	db, err := Open(opts)
+	defer destoryDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Put(utils.GetTestKey(11), utils.RandomValue(20))
+	assert.Nil(t, err)
+	err = db.Sync()
+	assert.Nil(t, err)
 }

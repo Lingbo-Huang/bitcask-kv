@@ -101,15 +101,14 @@ func (bti *btreeIterator) Rewind() {
 
 func (bti *btreeIterator) Seek(key []byte) {
 	if bti.reverse { // 反序,就返回第一个小于它的元素
-		sort.Search(len(bti.values), func(i int) bool {
+		bti.currIndex = sort.Search(len(bti.values), func(i int) bool {
 			return bytes.Compare(bti.values[i].key, key) <= 0
 		})
 	} else { // 返回第一个大于它的元素
-		sort.Search(len(bti.values), func(i int) bool {
+		bti.currIndex = sort.Search(len(bti.values), func(i int) bool {
 			return bytes.Compare(bti.values[i].key, key) >= 0
 		})
 	}
-
 }
 
 func (bti *btreeIterator) Next() {

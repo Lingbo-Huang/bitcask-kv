@@ -128,6 +128,14 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 
+	// 从数据文件中获取 value
+	return db.getValueByPosition(logRecordPos)
+}
+
+// 因为不管是db的Get，还是iterator里的Seek都要有这段逻辑
+// 根据拿到的数据位置*data.LogRecordPos 读取实际的数据 logRecord
+// 所以提取出来
+func (db *DB) getValueByPosition(logRecordPos *data.LogRecordPos) ([]byte, error) {
 	// 根据文件 id 找到对应的数据文件
 	var dataFile *data.DataFile
 	if db.activeFile.FileId == logRecordPos.Fid {

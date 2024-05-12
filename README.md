@@ -15,7 +15,7 @@ HTTP接口：基于Gin框架提供HTTP接口服务，是的存储引擎以服务
 
 ## 作者
 
-- [@Lingbo-Huang](https://www.github.com/octokatherine)
+- [@Lingbo-Huang](https://www.github.com/Lingbo-Huang)
 
 
 ## 截图

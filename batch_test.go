@@ -7,25 +7,23 @@ import (
 	"testing"
 )
 
-func TestDB_WriteBatch(t *testing.T) {
+func TestDB_WriteBatch1(t *testing.T) {
 	opts := DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-go-batch-1")
 	opts.DirPath = dir
-	opts.DataFileSize = 64 * 1024 * 1024
 	db, err := Open(opts)
-	defer destoryDB(db)
+	defer destroyDB(db)
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 
-	// 写数据之后并没提交的情况
+	// 写数据之后并不提交
 	wb := db.NewWriteBatch(DefaultWriteBatchOptions)
-	wb.Put(utils.GetTestKey(1), utils.RandomValue(10))
+	err = wb.Put(utils.GetTestKey(1), utils.RandomValue(10))
 	assert.Nil(t, err)
 	err = wb.Delete(utils.GetTestKey(2))
 	assert.Nil(t, err)
 
 	_, err = db.Get(utils.GetTestKey(1))
-	//t.Log(err)
 	assert.Equal(t, ErrKeyNotFound, err)
 
 	// 正常提交数据
@@ -33,7 +31,6 @@ func TestDB_WriteBatch(t *testing.T) {
 	assert.Nil(t, err)
 
 	val1, err := db.Get(utils.GetTestKey(1))
-	//t.Log(string(val1))
 	assert.NotNil(t, val1)
 	assert.Nil(t, err)
 
@@ -45,7 +42,6 @@ func TestDB_WriteBatch(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = db.Get(utils.GetTestKey(1))
-	//t.Log(err)
 	assert.Equal(t, ErrKeyNotFound, err)
 }
 
@@ -53,9 +49,8 @@ func TestDB_WriteBatch2(t *testing.T) {
 	opts := DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-go-batch-2")
 	opts.DirPath = dir
-	opts.DataFileSize = 64 * 1024 * 1024
 	db, err := Open(opts)
-	defer destoryDB(db)
+	defer destroyDB(db)
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 
@@ -63,10 +58,11 @@ func TestDB_WriteBatch2(t *testing.T) {
 	assert.Nil(t, err)
 
 	wb := db.NewWriteBatch(DefaultWriteBatchOptions)
-	err = wb.Put(utils.GetTestKey(1), utils.RandomValue(10))
+	err = wb.Put(utils.GetTestKey(2), utils.RandomValue(10))
 	assert.Nil(t, err)
 	err = wb.Delete(utils.GetTestKey(1))
 	assert.Nil(t, err)
+
 	err = wb.Commit()
 	assert.Nil(t, err)
 
@@ -80,40 +76,35 @@ func TestDB_WriteBatch2(t *testing.T) {
 	assert.Nil(t, err)
 
 	db2, err := Open(opts)
-	defer destoryDB(db2)
 	assert.Nil(t, err)
+
 	_, err = db2.Get(utils.GetTestKey(1))
-	//t.Log(err)
 	assert.Equal(t, ErrKeyNotFound, err)
 
 	// 校验序列号
-	//t.Log(db.seqNo)
-	assert.Equal(t, uint64(2), db.seqNo)
+	assert.Equal(t, uint64(2), db2.seqNo)
 }
 
 //func TestDB_WriteBatch3(t *testing.T) {
 //	opts := DefaultOptions
 //	//dir, _ := os.MkdirTemp("", "bitcask-go-batch-3")
-//	dir := "/mnt/d/golang/go_golandProject/bitcask-go/tmp"
+//	dir := "/tmp/bitcask-go-batch-3"
 //	opts.DirPath = dir
 //	db, err := Open(opts)
-//	//defer destoryDB(db)
+//	//defer destroyDB(db)
 //	assert.Nil(t, err)
 //	assert.NotNil(t, db)
 //
-//	//keys := db.ListKeys()
-//	//t.Log(len(keys))
-//
-//	wbOpts := DefaultWriteBatchOptions
-//	wbOpts.MaxBatchNum = 10000000
-//	wb := db.NewWriteBatch(wbOpts)
-//	for i := 0; i < 500000; i++ {
-//		err = wb.Put(utils.GetTestKey(i), utils.RandomValue(1024))
-//		assert.Nil(t, err)
-//	}
-//	err = wb.Commit()
-//	assert.Nil(t, err)
-//
-//	err = db.Close()
-//	assert.Nil(t, err)
+//	keys := db.ListKeys()
+//	t.Log(len(keys))
+//	//
+//	//wbOpts := DefaultWriteBatchOptions
+//	//wbOpts.MaxBatchNum = 10000000
+//	//wb := db.NewWriteBatch(wbOpts)
+//	//for i := 0; i < 500000; i++ {
+//	//	err := wb.Put(utils.GetTestKey(i), utils.RandomValue(1024))
+//	//	assert.Nil(t, err)
+//	//}
+//	//err = wb.Commit()
+//	//assert.Nil(t, err)
 //}

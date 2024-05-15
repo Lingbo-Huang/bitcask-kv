@@ -28,7 +28,7 @@ func (it *Iterator) Rewind() {
 	it.skipToNext()
 }
 
-// Seek 根据传入的 key 查找到第一个大于（或小于）等于的目标 key， 根据从这个 key 开始遍历
+// Seek 根据传入的 key 查找到第一个大于（或小于）等于的目标 key，根据从这个 key 开始遍历
 func (it *Iterator) Seek(key []byte) {
 	it.indexIter.Seek(key)
 	it.skipToNext()
@@ -40,7 +40,7 @@ func (it *Iterator) Next() {
 	it.skipToNext()
 }
 
-// Valid 是否有效，即是否已经遍历完所有的 key， 用于退出遍历
+// Valid 是否有效，即是否已经遍历完了所有的 key，用于退出遍历
 func (it *Iterator) Valid() bool {
 	return it.indexIter.Valid()
 }
@@ -51,8 +51,6 @@ func (it *Iterator) Key() []byte {
 }
 
 // Value 当前遍历位置的 Value 数据
-// 既然是用户的接口，这里应该返回实际存储的数据
-// 而不是在数据库的index里实现的那种返回数据位置 *data.LogRecordPos
 func (it *Iterator) Value() ([]byte, error) {
 	logRecordPos := it.indexIter.Value()
 	it.db.mu.RLock()
@@ -60,12 +58,11 @@ func (it *Iterator) Value() ([]byte, error) {
 	return it.db.getValueByPosition(logRecordPos)
 }
 
-// Close 关闭迭代器,释放相应资源
+// Close 关闭迭代器，释放相应资源
 func (it *Iterator) Close() {
 	it.indexIter.Close()
 }
 
-// 筛选满足 prefix 条件的 key
 func (it *Iterator) skipToNext() {
 	prefixLen := len(it.options.Prefix)
 	if prefixLen == 0 {

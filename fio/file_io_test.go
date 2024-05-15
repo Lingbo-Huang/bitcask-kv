@@ -13,21 +13,20 @@ func destroyFile(name string) {
 	}
 }
 
-func TestNewFileIO(t *testing.T) {
-	// 当使用wsl挂载本地时：项目在本地，但命令行访问路径只能通过/mnt/加本地路径访问
-	path := filepath.Join("/mnt/d/golang/go_golandProject/bitcask-go/tmp", "0001.data")
-	fio, err := NewFileIO(path)
-	defer fio.Close()
-	defer destroyFile(path) //清理掉测试产生的文件
+func TestNewFileIOManager(t *testing.T) {
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
+	defer destroyFile(path)
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 }
 
 func TestFileIO_Write(t *testing.T) {
-	path := filepath.Join("/mnt/d/golang/go_golandProject/bitcask-go/tmp", "0001.data")
-	fio, err := NewFileIO(path)
-	defer fio.Close()
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
 	defer destroyFile(path)
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 
@@ -40,16 +39,15 @@ func TestFileIO_Write(t *testing.T) {
 	assert.Nil(t, err)
 
 	n, err = fio.Write([]byte("storage"))
-	//t.Log(n, err)
 	assert.Equal(t, 7, n)
 	assert.Nil(t, err)
 }
 
 func TestFileIO_Read(t *testing.T) {
-	path := filepath.Join("/mnt/d/golang/go_golandProject/bitcask-go/tmp", "0001.data")
-	fio, err := NewFileIO(path)
-	defer fio.Close()
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
 	defer destroyFile(path)
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 
@@ -61,24 +59,20 @@ func TestFileIO_Read(t *testing.T) {
 
 	b1 := make([]byte, 5)
 	n, err := fio.Read(b1, 0)
-	//t.Log(b, n)
-	assert.Nil(t, err)
 	assert.Equal(t, 5, n)
 	assert.Equal(t, []byte("key-a"), b1)
 
 	b2 := make([]byte, 5)
 	n, err = fio.Read(b2, 5)
-	//t.Log(string(b2), err)
-	assert.Nil(t, err)
 	assert.Equal(t, 5, n)
 	assert.Equal(t, []byte("key-b"), b2)
 }
 
 func TestFileIO_Sync(t *testing.T) {
-	path := filepath.Join("/mnt/d/golang/go_golandProject/bitcask-go/tmp", "0001.data")
-	fio, err := NewFileIO(path)
-	defer fio.Close()
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
 	defer destroyFile(path)
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 
@@ -87,10 +81,10 @@ func TestFileIO_Sync(t *testing.T) {
 }
 
 func TestFileIO_Close(t *testing.T) {
-	path := filepath.Join("/mnt/d/golang/go_golandProject/bitcask-go/tmp", "0001.data")
-	fio, err := NewFileIO(path)
-	defer fio.Close()
+	path := filepath.Join("/tmp", "a.data")
+	fio, err := NewFileIOManager(path)
 	defer destroyFile(path)
+
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 

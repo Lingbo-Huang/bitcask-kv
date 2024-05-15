@@ -7,11 +7,12 @@ import (
 
 func main() {
 	opts := bitcask.DefaultOptions
-	opts.DirPath = "/mnt/d/golang/go_golandProject/bitcask-go/tmp/bitcask-go"
+	opts.DirPath = "/tmp/bitcask-go"
 	db, err := bitcask.Open(opts)
 	if err != nil {
 		panic(err)
 	}
+
 	err = db.Put([]byte("name"), []byte("bitcask"))
 	if err != nil {
 		panic(err)
@@ -26,5 +27,4 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 }

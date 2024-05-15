@@ -7,9 +7,10 @@ type FileIO struct {
 	fd *os.File // 系统文件描述符
 }
 
-func NewFileIO(filename string) (*FileIO, error) {
+// NewFileIOManager 初始化标准文件 IO
+func NewFileIOManager(fileName string) (*FileIO, error) {
 	fd, err := os.OpenFile(
-		filename,
+		fileName,
 		os.O_CREATE|os.O_RDWR|os.O_APPEND,
 		DataFilePerm,
 	)

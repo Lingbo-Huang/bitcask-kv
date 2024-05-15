@@ -8,30 +8,30 @@ import (
 	"sync"
 )
 
-// BTree 索引，封装 google 的btree ku
+// BTree 索引，主要封装了 google 的 btree ku
 // https://github.com/google/btree
 type BTree struct {
-	// Write operations are not safe for concurrent mutation by multiple
-	// goroutines, but Read operations are.(google/btree)
 	tree *btree.BTree
-	// 多线程环境访问存储引擎，需要加锁
 	lock *sync.RWMutex
 }
 
-// NewBTree 初始化 BTree 索引结构
+// NewBTree 新建 BTree 索引结构
 func NewBTree() *BTree {
 	return &BTree{
-		tree: btree.New(32), // 传入 degree 参数表示叶子节点个数
+		tree: btree.New(32),
 		lock: new(sync.RWMutex),
 	}
 }
 
-func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) bool {
+func (bt *BTree) Put(key []byte, pos *data.LogRecordPos) *data.LogRecordPos {
 	it := &Item{key: key, pos: pos}
 	bt.lock.Lock()
-	bt.tree.ReplaceOrInsert(it)
+	oldItem := bt.tree.ReplaceOrInsert(it)
 	bt.lock.Unlock()
-	return true
+	if oldItem == nil {
+		return nil
+	}
+	return oldItem.(*Item).pos
 }
 
 func (bt *BTree) Get(key []byte) *data.LogRecordPos {
@@ -43,15 +43,15 @@ func (bt *BTree) Get(key []byte) *data.LogRecordPos {
 	return btreeItem.(*Item).pos
 }
 
-func (bt *BTree) Delete(key []byte) bool {
+func (bt *BTree) Delete(key []byte) (*data.LogRecordPos, bool) {
 	it := &Item{key: key}
 	bt.lock.Lock()
-	defer bt.lock.Unlock()
 	oldItem := bt.tree.Delete(it)
+	bt.lock.Unlock()
 	if oldItem == nil {
-		return false
+		return nil, false
 	}
-	return true
+	return oldItem.(*Item).pos, true
 }
 
 func (bt *BTree) Size() int {
@@ -64,17 +64,21 @@ func (bt *BTree) Iterator(reverse bool) Iterator {
 	}
 	bt.lock.RLock()
 	defer bt.lock.RUnlock()
-	return newBtreeIterator(bt.tree, reverse)
+	return newBTreeIterator(bt.tree, reverse)
+}
+
+func (bt *BTree) Close() error {
+	return nil
 }
 
 // BTree 索引迭代器
 type btreeIterator struct {
-	currIndex int     // 当前遍历到数组的哪个下标
+	currIndex int     // 当前遍历的下标位置
 	reverse   bool    // 是否是反向遍历
-	values    []*Item // key 和位置索引信息
+	values    []*Item // key+位置索引信息
 }
 
-func newBtreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
+func newBTreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 	var idx int
 	values := make([]*Item, tree.Len())
 
@@ -84,12 +88,10 @@ func newBtreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 		idx++
 		return true
 	}
-
-	if reverse { // 从大到小
-		tree.Descend(saveValues) // 从大到小取出索引信息
+	if reverse {
+		tree.Descend(saveValues)
 	} else {
-		tree.Ascend(saveValues) //从小到大排列取出索引信息
-
+		tree.Ascend(saveValues)
 	}
 
 	return &btreeIterator{
@@ -104,11 +106,11 @@ func (bti *btreeIterator) Rewind() {
 }
 
 func (bti *btreeIterator) Seek(key []byte) {
-	if bti.reverse { // 反序,就返回第一个小于它的元素
+	if bti.reverse {
 		bti.currIndex = sort.Search(len(bti.values), func(i int) bool {
 			return bytes.Compare(bti.values[i].key, key) <= 0
 		})
-	} else { // 返回第一个大于它的元素
+	} else {
 		bti.currIndex = sort.Search(len(bti.values), func(i int) bool {
 			return bytes.Compare(bti.values[i].key, key) >= 0
 		})

@@ -7,10 +7,8 @@ import (
 	"sync/atomic"
 )
 
-// 因为db的put,delete操作都是非事务的,所以需要标识
 const nonTransactionSeqNo uint64 = 0
 
-// txnFinKey 用于标识事务的结尾
 var txnFinKey = []byte("txn-fin")
 
 // WriteBatch 原子批量写数据，保证原子性
@@ -23,6 +21,9 @@ type WriteBatch struct {
 
 // NewWriteBatch 初始化 WriteBatch
 func (db *DB) NewWriteBatch(opts WriteBatchOptions) *WriteBatch {
+	if db.options.IndexType == BPlusTree && !db.seqNoFileExists && !db.isInitial {
+		panic("cannot use write batch, seq no file not exists")
+	}
 	return &WriteBatch{
 		options:       opts,
 		mu:            new(sync.Mutex),
@@ -68,7 +69,7 @@ func (wb *WriteBatch) Delete(key []byte) error {
 	return nil
 }
 
-// Commit 提交事务, 将暂存的数据写到数据文件,并更新内存索引
+// Commit 提交事务，将暂存的数据写到数据文件，并更新内存索引
 func (wb *WriteBatch) Commit() error {
 	wb.mu.Lock()
 	defer wb.mu.Unlock()
@@ -80,14 +81,14 @@ func (wb *WriteBatch) Commit() error {
 		return ErrExceedMaxBatchNum
 	}
 
-	// 加锁保证事务提交的串行化
+	// 加锁保证事务提交串行化
 	wb.db.mu.Lock()
 	defer wb.db.mu.Unlock()
 
 	// 获取当前最新的事务序列号
 	seqNo := atomic.AddUint64(&wb.db.seqNo, 1)
 
-	// 开始写数据到数据文件中
+	// 开始写数据到数据文件当中
 	positions := make(map[string]*data.LogRecordPos)
 	for _, record := range wb.pendingWrites {
 		logRecordPos, err := wb.db.appendLogRecord(&data.LogRecord{
@@ -101,7 +102,7 @@ func (wb *WriteBatch) Commit() error {
 		positions[string(record.Key)] = logRecordPos
 	}
 
-	// 在结尾加上一条标识事务完成的数据
+	// 写一条标识事务完成的数据
 	finishedRecord := &data.LogRecord{
 		Key:  logRecordKeyWithSeq(txnFinKey, seqNo),
 		Type: data.LogRecordTxnFinished,
@@ -120,11 +121,15 @@ func (wb *WriteBatch) Commit() error {
 	// 更新内存索引
 	for _, record := range wb.pendingWrites {
 		pos := positions[string(record.Key)]
+		var oldPos *data.LogRecordPos
 		if record.Type == data.LogRecordNormal {
-			wb.db.index.Put(record.Key, pos)
+			oldPos = wb.db.index.Put(record.Key, pos)
 		}
 		if record.Type == data.LogRecordDeleted {
-			wb.db.index.Delete(record.Key)
+			oldPos, _ = wb.db.index.Delete(record.Key)
+		}
+		if oldPos != nil {
+			wb.db.reclaimSize += int64(oldPos.Size)
 		}
 	}
 
@@ -134,7 +139,7 @@ func (wb *WriteBatch) Commit() error {
 	return nil
 }
 
-// key + SeqNum 编码
+// key+Seq Number 编码
 func logRecordKeyWithSeq(key []byte, seqNo uint64) []byte {
 	seq := make([]byte, binary.MaxVarintLen64)
 	n := binary.PutUvarint(seq[:], seqNo)
@@ -146,7 +151,7 @@ func logRecordKeyWithSeq(key []byte, seqNo uint64) []byte {
 	return encKey
 }
 
-// 解析 LogRecord 的 key, 获取实际的 key 和 事务序列号
+// 解析 LogRecord 的 key，获取实际的 key 和事务序列号
 func parseLogRecordKey(key []byte) ([]byte, uint64) {
 	seqNo, n := binary.Uvarint(key)
 	realKey := key[n:]

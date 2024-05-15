@@ -13,8 +13,12 @@ var (
 	ErrInvalidCRC = errors.New("invalid crc value, log record maybe corrupted")
 )
 
-// .data 后缀常量
-const DataFileNameSuffix = ".data"
+const (
+	DataFileNameSuffix    = ".data"
+	HintFileName          = "hint-index"
+	MergeFinishedFileName = "merge-finished"
+	SeqNoFileName         = "seq-no"
+)
 
 // DataFile 数据文件
 type DataFile struct {
@@ -24,14 +28,39 @@ type DataFile struct {
 }
 
 // OpenDataFile 打开新的数据文件
-func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
-	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+func OpenDataFile(dirPath string, fileId uint32, ioType fio.FileIOType) (*DataFile, error) {
+	fileName := GetDataFileName(dirPath, fileId)
+	return newDataFile(fileName, fileId, ioType)
+}
+
+// OpenHintFile 打开 Hint 索引文件
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, HintFileName)
+	return newDataFile(fileName, 0, fio.StandardFIO)
+}
+
+// OpenMergeFinishedFile 打开标识 merge 完成的文件
+func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, MergeFinishedFileName)
+	return newDataFile(fileName, 0, fio.StandardFIO)
+}
+
+// OpenSeqNoFile 存储事务序列号的文件
+func OpenSeqNoFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, SeqNoFileName)
+	return newDataFile(fileName, 0, fio.StandardFIO)
+}
+
+func GetDataFileName(dirPath string, fileId uint32) string {
+	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+}
+
+func newDataFile(fileName string, fileId uint32, ioType fio.FileIOType) (*DataFile, error) {
 	// 初始化 IOManager 管理器接口
-	ioManager, err := fio.NewIOManager(fileName)
+	ioManager, err := fio.NewIOManager(fileName, ioType)
 	if err != nil {
 		return nil, err
 	}
-
 	return &DataFile{
 		FileId:    fileId,
 		WriteOff:  0,
@@ -40,9 +69,7 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 }
 
 // ReadLogRecord 根据 offset 从数据文件中读取 LogRecord
-// 第二个返回值是 logRecord 的大小
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	// 为了防止按照最大长度读取，结果超出了文件末尾，出现错误，要获取文件的大小
 	fileSize, err := df.IoManager.Size()
 	if err != nil {
 		return nil, 0, err
@@ -53,19 +80,18 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	if offset+maxLogRecordHeaderSize > fileSize {
 		headerBytes = fileSize - offset
 	}
-	// 读取 Header 信息
 
+	// 读取 Header 信息
 	headerBuf, err := df.readNBytes(headerBytes, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	header, headerSize := decodeLogRecordHeader(headerBuf)
-	// 如果 header 没有读取到，说明读到了文件末尾，返回io.EOF错误
+	// 下面的两个条件表示读取到了文件末尾，直接返回 EOF 错误
 	if header == nil {
 		return nil, 0, io.EOF
 	}
-	// 如果读取到的crc为0，keySize和valueSize都是0，也说明读到了文件末尾
 	if header.crc == 0 && header.keySize == 0 && header.valueSize == 0 {
 		return nil, 0, io.EOF
 	}
@@ -75,18 +101,18 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	var recordSize = headerSize + keySize + valueSize
 
 	logRecord := &LogRecord{Type: header.recordType}
-	// 读取用户实际存储的 key/value 数据
+	// 开始读取用户实际存储的 key/value 数据
 	if keySize > 0 || valueSize > 0 {
 		kvBuf, err := df.readNBytes(keySize+valueSize, offset+headerSize)
 		if err != nil {
 			return nil, 0, err
 		}
-		// 解出 key 和 value
+		//	解出 key 和 value
 		logRecord.Key = kvBuf[:keySize]
 		logRecord.Value = kvBuf[keySize:]
 	}
 
-	// 校验数据的crc 是否正确（数据的有效性）
+	// 校验数据的有效性
 	crc := getLogRecordCRC(logRecord, headerBuf[crc32.Size:headerSize])
 	if crc != header.crc {
 		return nil, 0, ErrInvalidCRC
@@ -94,7 +120,6 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	return logRecord, recordSize, nil
 }
 
-// 写入数据文件
 func (df *DataFile) Write(buf []byte) error {
 	n, err := df.IoManager.Write(buf)
 	if err != nil {
@@ -104,13 +129,34 @@ func (df *DataFile) Write(buf []byte) error {
 	return nil
 }
 
-// Sync 持久化：将数据文件写入磁盘
+// WriteHintRecord 写入索引信息到 hint 文件中
+func (df *DataFile) WriteHintRecord(key []byte, pos *LogRecordPos) error {
+	record := &LogRecord{
+		Key:   key,
+		Value: EncodeLogRecordPos(pos),
+	}
+	encRecord, _ := EncodeLogRecord(record)
+	return df.Write(encRecord)
+}
+
 func (df *DataFile) Sync() error {
 	return df.IoManager.Sync()
 }
 
 func (df *DataFile) Close() error {
 	return df.IoManager.Close()
+}
+
+func (df *DataFile) SetIOManager(dirPath string, ioType fio.FileIOType) error {
+	if err := df.IoManager.Close(); err != nil {
+		return err
+	}
+	ioManager, err := fio.NewIOManager(GetDataFileName(dirPath, df.FileId), ioType)
+	if err != nil {
+		return err
+	}
+	df.IoManager = ioManager
+	return nil
 }
 
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {

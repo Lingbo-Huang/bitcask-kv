@@ -16,11 +16,11 @@ func GetTestKey(i int) []byte {
 	return []byte(fmt.Sprintf("bitcask-go-key-%09d", i))
 }
 
-// RandomValue 生成不同长度的随机的字符串作为 value， 用于测试
+// RandomValue 生成随机 value，用于测试
 func RandomValue(n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = letters[randStr.Intn(len(letters))]
 	}
-	return []byte("bitcask-go-value" + string(b))
+	return []byte("bitcask-go-value-" + string(b))
 }
